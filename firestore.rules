@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "narendraga2005@gmail.com" ||
+        request.auth.token.email == "narendraf@gmail.com"
+      );
+    }
+
+    function isFaculty() {
+      return isSuperAdmin() || (isAuthenticated() && getUserData().role == 'faculty');
+    }
+
+    function isStudent() {
+      return isAuthenticated() && getUserData().role == 'student';
+    }
+
+    function isMemberOfGroup(groupId) {
+      return isAuthenticated() && (
+        isFaculty() || 
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.studentIds
+      );
+    }
+
+    function isValidNote(data) {
+      return data.groupId is string &&
+             data.title is string &&
+             data.content is string &&
+             data.facultyId == request.auth.uid &&
+             (!('attachments' in data) || data.attachments is list);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /{allPaths=**} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && 
+        request.resource.data.role in ['student', 'faculty'] &&
+        request.resource.data.keys().hasAll(['uid', 'email', 'role', 'name']);
+      allow update: if isOwner(userId) && 
+        request.resource.data.role == resource.data.role;
+      allow delete: if isFaculty();
+    }
+
+    match /groups/{groupId} {
+      allow read: if isAuthenticated() && (
+        isFaculty() || 
+        request.auth.uid in resource.data.studentIds
+      );
+      allow create: if isFaculty();
+      allow update, delete: if isSuperAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid);
+    }
+
+    match /notes/{noteId} {
+      allow read: if isAuthenticated() && isMemberOfGroup(resource.data.groupId);
+      allow create: if isFaculty() && isValidNote(request.resource.data);
+      allow update: if (isSuperAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid)) && isValidNote(request.resource.data);
+      allow delete: if isSuperAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid);
+    }
+
+    match /deadlines/{deadlineId} {
+      allow read: if isAuthenticated() && isMemberOfGroup(resource.data.groupId);
+      allow create: if isFaculty();
+      allow update, delete: if isSuperAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid);
+    }
+
+    match /attendanceSessions/{sessionId} {
+      allow read: if isAuthenticated() && isMemberOfGroup(resource.data.groupId);
+      allow create: if isFaculty();
+      allow update, delete: if isSuperAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid);
+    }
+
+    match /attendanceRecords/{recordId} {
+      allow read: if isAuthenticated() && (
+        isFaculty() || 
+        resource.data.studentId == request.auth.uid
+      );
+      allow create: if isStudent() && 
+        request.resource.data.studentId == request.auth.uid &&
+        isMemberOfGroup(request.resource.data.groupId);
+      allow update, delete: if isSuperAdmin() || isFaculty();
+    }
+
+    match /marks/{markId} {
+      allow read: if isAuthenticated() && (
+        isFaculty() || 
+        resource.data.studentId == request.auth.uid
+      );
+      allow create, update, delete: if isFaculty();
+    }
+  }
+}

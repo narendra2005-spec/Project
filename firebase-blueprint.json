@@ -1,0 +1,141 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "faculty"] },
+        "name": { "type": "string" },
+        "studentId": { "type": "string", "description": "Roll number or ID for students" }
+      },
+      "required": ["uid", "email", "role", "name"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A class or subject group created by faculty",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "studentIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "facultyId", "studentIds"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "Educational notes posted in a group",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string" },
+              "size": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["groupId", "title", "content", "facultyId"]
+    },
+    "Deadline": {
+      "title": "Deadline",
+      "description": "Submission deadlines for assignments or experiments",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["assignment", "experiment"] },
+        "facultyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "title", "dueDate", "type", "facultyId"]
+    },
+    "AttendanceSession": {
+      "title": "AttendanceSession",
+      "description": "A timed window for students to mark attendance",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "code": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "facultyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "code", "expiresAt", "facultyId"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "A record of a student's attendance for a session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "studentId", "groupId", "timestamp"]
+    },
+    "Marks": {
+      "title": "Marks",
+      "description": "Internal assessment marks for a student in a subject",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "subject": { "type": "string" },
+        "test1": { "type": "number" },
+        "test2": { "type": "number" },
+        "test3": { "type": "number" },
+        "average": { "type": "number", "description": "Average of best two scores" },
+        "facultyId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "groupId", "facultyId"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Class groups"
+    },
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Educational notes"
+    },
+    "/deadlines/{deadlineId}": {
+      "schema": "Deadline",
+      "description": "Submission deadlines"
+    },
+    "/attendanceSessions/{sessionId}": {
+      "schema": "AttendanceSession",
+      "description": "Active attendance windows"
+    },
+    "/attendanceRecords/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Student attendance logs"
+    },
+    "/marks/{markId}": {
+      "schema": "Marks",
+      "description": "Student marks"
+    }
+  }
+}

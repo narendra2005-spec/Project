@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --spacing-safe-top: env(safe-area-inset-top);
+  --spacing-safe-bottom: env(safe-area-inset-bottom);
+}
+
+body {
+  background-color: #f5f5f5;
+  /* Handle safe areas globally - only bottom here, top handled by nav/containers */
+  padding-bottom: var(--spacing-safe-bottom);
+  overflow-x: hidden;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
