@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Browser } from '@capacitor/browser';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
 import { Capacitor } from '@capacitor/core';
 import { db, handleFirestoreError, OperationType, storage } from '../firebase';
@@ -13,8 +13,6 @@ import { cn } from '../utils';
 import { format, addMinutes, isAfter, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isWithinInterval } from 'date-fns';
 import { CustomSelect } from './CustomSelect';
 import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 export default function FacultyDashboard({ user }: { user: UserProfile }) {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -553,15 +551,6 @@ function AttendanceManager({ user, groups, allStudents }: { user: UserProfile; g
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
 
-      const doc = new jsPDF({
-        orientation: sortedSessions.length > 5 ? 'landscape' : 'portrait'
-      });
-      doc.setFontSize(20);
-      doc.text(`Monthly Attendance Report - ${group?.name}`, 14, 22);
-      doc.setFontSize(12);
-      doc.text(`Month: ${format(currentMonth, 'MMMM yyyy')}`, 14, 30);
-      doc.text(`Faculty: ${user.name}`, 14, 38);
-
       const headers = [
         'Student Name', 
         'Roll Number', 
@@ -588,26 +577,43 @@ function AttendanceManager({ user, groups, allStudents }: { user: UserProfile; g
         ];
       });
 
-      autoTable(doc, {
-        startY: 45,
-        head: [headers],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { 
-          fillColor: [20, 20, 20],
-          fontSize: sortedSessions.length > 10 ? 8 : 10
-        },
-        styles: {
-          fontSize: sortedSessions.length > 10 ? 7 : 9,
-          cellPadding: 2
-        },
-        columnStyles: {
-          0: { cellWidth: 'auto' },
-          1: { cellWidth: 'auto' }
-        }
-      });
+      // Generate CSV string
+      const csvContent = [
+        headers.join(','),
+        ...tableData.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
 
-      doc.save(`Attendance_${group?.name}_${format(currentMonth, 'MMM_yyyy')}.pdf`);
+      const fileName = `Attendance_${group?.name}_${format(currentMonth, 'MMM_yyyy')}.csv`;
+
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const result = await Filesystem.writeFile({
+            path: fileName,
+            data: csvContent,
+            directory: Directory.Cache,
+            encoding: Encoding.UTF8
+          });
+          await FileOpener.open({
+            filePath: result.uri,
+            contentType: 'text/csv'
+          });
+        } catch (e) {
+          console.error('Native export failed:', e);
+          alert('Failed to save or open the file on your device.');
+        }
+      } else {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+          const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url);
+          link.setAttribute('download', fileName);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      }
     } catch (err) {
       console.error('Export failed:', err);
       alert('Failed to generate report.');
