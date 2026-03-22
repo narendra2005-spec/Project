@@ -3,6 +3,7 @@ import { Browser } from '@capacitor/browser';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
 import { Capacitor } from '@capacitor/core';
+import { Share as CapacitorShare } from '@capacitor/share';
 import { db, handleFirestoreError, OperationType, storage } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs, deleteDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -12,7 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../utils';
 import { format, addMinutes, isAfter, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isWithinInterval } from 'date-fns';
 import { CustomSelect } from './CustomSelect';
-import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Share } from 'lucide-react';
 
 export default function FacultyDashboard({ user }: { user: UserProfile }) {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -583,7 +584,8 @@ function AttendanceManager({ user, groups, allStudents }: { user: UserProfile; g
         ...tableData.map(row => row.map(cell => `"${cell}"`).join(','))
       ].join('\n');
 
-      const fileName = `Attendance_${group?.name}_${format(currentMonth, 'MMM_yyyy')}.csv`;
+      const safeGroupName = (group?.name || 'Group').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const fileName = `Attendance_${safeGroupName}_${format(currentMonth, 'MMM_yyyy')}.csv`;
 
       if (Capacitor.isNativePlatform()) {
         try {
@@ -593,13 +595,31 @@ function AttendanceManager({ user, groups, allStudents }: { user: UserProfile; g
             directory: Directory.Cache,
             encoding: Encoding.UTF8
           });
-          await FileOpener.open({
-            filePath: result.uri,
-            contentType: 'text/csv'
-          });
-        } catch (e) {
+          
+          let filePath = result.uri;
+          // Ensure file:// prefix for Android FileOpener
+          if (filePath && !filePath.startsWith('file://') && !filePath.startsWith('content://')) {
+            filePath = 'file://' + filePath;
+          }
+
+          try {
+            await FileOpener.open({
+              filePath: filePath,
+              contentType: 'text/csv'
+            });
+          } catch (openerError) {
+            console.error('FileOpener failed, falling back to Share:', openerError);
+            // Fallback to native share sheet if no CSV viewer is installed
+            await CapacitorShare.share({
+              title: 'Attendance Report',
+              text: `Attendance report for ${group?.name}`,
+              url: filePath,
+              dialogTitle: 'Share or Save Report'
+            });
+          }
+        } catch (e: any) {
           console.error('Native export failed:', e);
-          alert('Failed to save or open the file on your device.');
+          alert(`Failed to save or open the file: ${e.message || 'Unknown error'}`);
         }
       } else {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
