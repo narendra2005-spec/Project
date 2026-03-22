@@ -428,12 +428,24 @@ function StudentNotes({ user, groups }: { user: UserProfile; groups: Group[] }) 
     
     setDownloadingFileId(fileId);
     
+    // We DO NOT use fl_attachment because it breaks Android Custom Tabs and some native viewers
+    const downloadUrl = file.url;
+    
+    const isPdf = file.type === 'application/pdf' || 
+                  downloadUrl.toLowerCase().endsWith('.pdf') || 
+                  (file.name && file.name.toLowerCase().endsWith('.pdf'));
+    
     try {
       if (Capacitor.isNativePlatform()) {
         // Download directly to device filesystem (bypasses CORS and memory limits)
-        const fileName = file.name || `download_${Date.now()}`;
+        // Sanitize filename to prevent filesystem errors
+        let fileName = (file.name || `download_${Date.now()}`).replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        if (!fileName.toLowerCase().endsWith('.pdf') && isPdf) {
+          fileName += '.pdf';
+        }
+        
         const result = await Filesystem.downloadFile({
-          url: file.url,
+          url: downloadUrl,
           path: fileName,
           directory: Directory.Cache
         });
@@ -441,26 +453,37 @@ function StudentNotes({ user, groups }: { user: UserProfile; groups: Group[] }) 
         // Get the full path and try to open it natively
         if (result.path) {
           try {
+            let filePath = result.path;
+            // FileOpener requires the file:// prefix on Android
+            if (!filePath.startsWith('file://')) {
+              filePath = 'file://' + filePath;
+            }
+            
             await FileOpener.open({
-              filePath: result.path,
-              contentType: file.type || 'application/pdf'
+              filePath: filePath,
+              // Force application/pdf for PDFs so Android routes to the correct viewer
+              contentType: isPdf ? 'application/pdf' : (file.type || 'application/octet-stream')
             });
           } catch (fileOpenerErr) {
              console.error('FileOpener failed', fileOpenerErr);
-             // Fallback to system browser
-             window.open(file.url, '_system');
+             // Fallback to external system browser
+             await Browser.open({ url: downloadUrl });
           }
         } else {
-          window.open(file.url, '_system');
+          await Browser.open({ url: downloadUrl });
         }
       } else {
         // On web, just open in a new tab
-        window.open(file.url, '_blank');
+        window.open(downloadUrl, '_blank');
       }
     } catch (downloadErr) {
       console.error('Download failed', downloadErr);
-      // Last resort: try opening in system browser directly
-      window.open(file.url, '_system');
+      // Last resort: external system browser
+      try {
+        await Browser.open({ url: downloadUrl });
+      } catch (browserErr) {
+        window.open(downloadUrl, '_blank');
+      }
     } finally {
       setDownloadingFileId(null);
     }
